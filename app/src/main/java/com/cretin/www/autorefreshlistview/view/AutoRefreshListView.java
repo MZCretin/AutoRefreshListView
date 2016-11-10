@@ -4,6 +4,7 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.Build;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AbsListView;
@@ -21,6 +22,7 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
     public static final String NO_MORE = "没有更多数据";
     public static final String LOADING = "正在加载...";
     public static final String LOADING_FAIL = "加载失败";
+    public static final String LOADING_MORE = "点击加载更多";
     public static final int NO_MORE_STATE = 0;
     public static final int LOADING_STATE = 1;
     public static final int LOADING_FAIL_STATE = 2;
@@ -29,9 +31,8 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
     private boolean isFooter;
     private ProgressBar footerProgress;
     private TextView tips;
-    private int currState = 0;
+    private int currState = LOADING_COMPLETE_STATE;
     private RefreshCallBack callBack;
-
 
     public AutoRefreshListView(Context context) {
         super(context);
@@ -55,49 +56,69 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
     }
 
     private void init(Context context) {
-        setOnScrollListener(this);
         handelFooter(context);
+        setOnScrollListener(this);
+        switch (currState){
+            case NO_MORE_STATE:
+                noMoreData();
+                break;
+            case LOADING_STATE:
+                loading();
+                break;
+            case LOADING_FAIL_STATE:
+                loadingFail();
+                break;
+            case LOADING_COMPLETE_STATE:
+                loadComplete();
+                break;
+        }
     }
 
     //处理footerView
     private void handelFooter(Context context) {
         footerView = LayoutInflater.from(context).inflate(R.layout.auto_listview_footer, null);
+        addFooterView(footerView);
         footerProgress = (ProgressBar) footerView.findViewById(R.id.auto_listview_footer_progress);
         tips = (TextView) footerView.findViewById(R.id.auto_listview_footer_tips);
         footerView.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (currState != LOADING_STATE) {
+                if (currState != LOADING_STATE && currState != NO_MORE_STATE) {
                     if (callBack != null) {
                         loading();
-                        callBack.onRefresh();
+                        callBack.onRefreshing();
                     }
                 }
             }
         });
-        addFooterView(footerView);
+    }
+
+    //隐藏加载更多
+    public void hideAddMoreView() {
+        if (footerView != null)
+            removeFooterView(footerView);
     }
 
     @Override
-    public void onScrollStateChanged(AbsListView absListView, int state) {
-    }
-
-    @Override
-    public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
-        if (visibleItemCount == totalItemCount) {
-            noMoreData();
-        } else if ((firstVisibleItem + visibleItemCount >= totalItemCount)
-                && totalItemCount != 0) {
-            if (!isFooter && currState != LOADING_STATE) {
+    public void onScrollStateChanged(AbsListView view, int scrollState) {
+        Log.e("HHHHHHHHHH","");
+        if (lastVisibleItem == totalItemCount && scrollState == SCROLL_STATE_IDLE) {
+            if (currState != LOADING_STATE && currState != NO_MORE_STATE) {
                 if (callBack != null) {
                     loading();
-                    callBack.onRefresh();
+                    callBack.onRefreshing();
                 }
-                isFooter = true;
             }
-        } else {
-            isFooter = false;
         }
+    }
+
+    private int totalItemCount, lastVisibleItem;
+
+    @Override
+    public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
+                         int totalItemCount) {
+        this.totalItemCount = totalItemCount;
+        this.lastVisibleItem = firstVisibleItem + visibleItemCount;
     }
 
     //没有更多数据
@@ -111,7 +132,7 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
 
     //正在加载
     public void loading() {
-        if (footerView != null)
+        if (footerProgress != null)
             footerProgress.setVisibility(VISIBLE);
         if (tips != null)
             tips.setText(LOADING);
@@ -121,6 +142,10 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
     //加载完成
     public void loadComplete() {
         currState = LOADING_COMPLETE_STATE;
+        if (footerProgress != null)
+            footerProgress.setVisibility(GONE);
+        if (tips != null)
+            tips.setText(LOADING_MORE);
     }
 
     //加载失败
@@ -133,7 +158,7 @@ public class AutoRefreshListView extends ListView implements AbsListView.OnScrol
     }
 
     public interface RefreshCallBack {
-        void onRefresh();
+        void onRefreshing();
     }
 
     public RefreshCallBack getCallBack() {
